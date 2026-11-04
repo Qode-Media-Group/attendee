@@ -10,7 +10,42 @@ services:
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
       - ENABLE_CHROME_SANDBOX=false
+      - LAUNCH_BOT_METHOD=docker-compose-multi-host
     command: "celery -A attendee worker -l INFO"
+
+  # Starts each bot in its own container (attendee-bot-<id>), which is removed when the bot
+  # ends, so a crashed or stuck bot can't leave Chrome running. Bot containers copy this
+  # service's environment and use host networking, where service names don't resolve, so
+  # postgres and redis are given by their fixed addresses on attendee_network (below).
+  attendee-bot-launcher-local:
+    image: attendee-attendee-worker-local:latest
+    depends_on:
+      - attendee-worker-local
+    volumes:
+     - .:/attendee
+     - /var/run/docker.sock:/var/run/docker.sock
+    # The image runs as "app"; the Docker socket is only open to the root group
+    group_add:
+      - "0"
+    networks:
+      - attendee_network
+    environment:
+      - POSTGRES_HOST=172.18.0.200
+      - REDIS_URL=redis://172.18.0.201:6379/5
+      - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - ENABLE_CHROME_SANDBOX=false
+      - LAUNCH_BOT_METHOD=docker-compose-multi-host
+      # Bots share the host network, so each one picks a free websocket port
+      - ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS=true
+      - BOT_CONTAINER_IMAGE=attendee-attendee-worker-local:latest
+      # This folder on the host, mounted into each bot container (run docker compose from here)
+      - BOT_HOST_CODE_PATH=${PWD}
+      - BOT_MEMORY_LIMIT=2g
+      # The image is linux/amd64, so on Apple Silicon Chrome runs emulated and needs more than 1 CPU
+      - BOT_CPU_QUOTA=400000
+      - BOT_MAX_SIMULTANEOUS_BOTS=2
+    command: "celery -A attendee worker -Q bot_launcher_vm -l INFO"
+    entrypoint: []
 
   attendee-scheduler-local:
     build: ./
@@ -22,6 +57,7 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - LAUNCH_BOT_METHOD=docker-compose-multi-host
     command: "python manage.py run_scheduler"
     entrypoint: []
 
@@ -37,6 +73,7 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_URL=redis://redis:6379/5
       - DJANGO_SETTINGS_MODULE=attendee.settings.development
+      - LAUNCH_BOT_METHOD=docker-compose-multi-host
     command: python manage.py runserver 0.0.0.0:8000
     entrypoint: []
 
@@ -68,14 +105,18 @@ services:
     volumes:
        - postgres:/data/postgres
     networks:
-      - attendee_network
+      attendee_network:
+        # Fixed, so bot containers (host networking) can reach it; see attendee-bot-launcher-local
+        ipv4_address: 172.18.0.200
     restart: unless-stopped
 
 
   redis:
     image: redis:7-alpine
     networks:
-      - attendee_network
+      attendee_network:
+        # Fixed, so bot containers (host networking) can reach it; see attendee-bot-launcher-local
+        ipv4_address: 172.18.0.201
     restart: unless-stopped
     volumes:
       - redis:/data/redis
@@ -117,6 +158,9 @@ services:
 networks:
   attendee_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
 
 volumes:
   postgres:
