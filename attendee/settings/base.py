@@ -116,6 +116,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "attendee.context_processors.app_name",
             ],
         },
     },
@@ -170,9 +171,13 @@ if os.getenv("DISABLE_REDIS_SSL"):  # backward compatibility
     redis_params["ssl_cert_reqs"] = "none"
 elif os.getenv("REDIS_SSL_REQUIREMENTS"):
     redis_params["ssl_cert_reqs"] = os.getenv("REDIS_SSL_REQUIREMENTS")
-redis_params_query_string = "&".join([f"{key}={value}" for key, value in redis_params.items()])
+redis_params_query_string = "&".join(
+    [f"{key}={value}" for key, value in redis_params.items()]
+)
 
-REDIS_URL_WITH_PARAMS = os.getenv("REDIS_URL") + ("?" + redis_params_query_string if redis_params_query_string else "")
+REDIS_URL_WITH_PARAMS = os.getenv("REDIS_URL") + (
+    "?" + redis_params_query_string if redis_params_query_string else ""
+)
 
 CELERY_BROKER_URL = REDIS_URL_WITH_PARAMS
 CELERY_RESULT_BACKEND = REDIS_URL_WITH_PARAMS
@@ -203,7 +208,10 @@ CELERY_TASK_ROUTES = {
     },
 }
 
-if os.getenv("LAUNCH_BOT_METHOD") != "kubernetes" and os.getenv("LAUNCH_BOT_METHOD") != "docker-compose-multi-host":
+if (
+    os.getenv("LAUNCH_BOT_METHOD") != "kubernetes"
+    and os.getenv("LAUNCH_BOT_METHOD") != "docker-compose-multi-host"
+):
     # This setting means that each celery worker process will be recreated after each task.
     # Needed because latest Zoom SDK has segfault issue unless we recreate the process after each bot.
     CELERY_WORKER_MAX_TASKS_PER_CHILD = 1
@@ -230,12 +238,18 @@ DISABLE_RATE_LIMITING = os.getenv("DISABLE_RATE_LIMITING", "false") == "true"
 
 # When enabled, the team management UI exposes granular per-project permissions for viewing
 # recording content and managing API keys.
-ENABLE_GRANULAR_PERMISSIONS = os.getenv("ENABLE_GRANULAR_PERMISSIONS", "false") == "true"
+ENABLE_GRANULAR_PERMISSIONS = (
+    os.getenv("ENABLE_GRANULAR_PERMISSIONS", "false") == "true"
+)
 
-ENABLE_VIEWING_RECORDING_CONTENT = os.getenv("ENABLE_VIEWING_RECORDING_CONTENT", "true") == "true"
+ENABLE_VIEWING_RECORDING_CONTENT = (
+    os.getenv("ENABLE_VIEWING_RECORDING_CONTENT", "true") == "true"
+)
+
+APP_NAME = os.getenv("APP_NAME", "Attendee Bot")
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Attendee API",
+    "TITLE": f"{APP_NAME} API",
     "DESCRIPTION": "Meetings bots made easy",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -254,21 +268,28 @@ SPECTACULAR_SETTINGS = {
 # Logging formatters - shared across environments
 LOG_FORMATTERS = {
     "plain": {"format": "{levelname} {message}", "style": "{"},
-    "json": {"class": "attendee.logging.ISOJsonFormatter", "format": "%(timestamp)s %(name)s %(levelname)s %(message)s"},
+    "json": {
+        "class": "attendee.logging.ISOJsonFormatter",
+        "format": "%(timestamp)s %(name)s %(levelname)s %(message)s",
+    },
 }
 
 # When enabled on a bot pod, the pod's application logs are also written to a size capped file
 # which is attached to the bot's last event as a debug artifact when the bot cleans up.
 SAVE_BOT_LOGS_TO_DASHBOARD = os.getenv("SAVE_BOT_LOGS_TO_DASHBOARD", "false") == "true"
 BOT_POD_LOG_FILE_PATH = os.getenv("BOT_POD_LOG_FILE_PATH", "/tmp/bot_pod_logs.log")
-BOT_POD_LOG_FILE_MAX_BYTES = int(os.getenv("BOT_POD_LOG_FILE_MAX_BYTES", 25 * 1024 * 1024))
+BOT_POD_LOG_FILE_MAX_BYTES = int(
+    os.getenv("BOT_POD_LOG_FILE_MAX_BYTES", 25 * 1024 * 1024)
+)
 
 # Log handlers - shared across environments
 LOG_HANDLERS = {
     "console": {
         "class": "logging.StreamHandler",
         "stream": sys.stdout,
-        "formatter": os.getenv("ATTENDEE_LOG_FORMAT"),  # `None` (default formatter) is the default
+        "formatter": os.getenv(
+            "ATTENDEE_LOG_FORMAT"
+        ),  # `None` (default formatter) is the default
     },
 }
 
@@ -279,7 +300,9 @@ if IS_A_BOT_POD and SAVE_BOT_LOGS_TO_DASHBOARD:
         # A single backup of half the cap keeps the most recent logs while staying under the cap.
         "maxBytes": BOT_POD_LOG_FILE_MAX_BYTES // 2,
         "backupCount": 1,
-        "formatter": os.getenv("ATTENDEE_LOG_FORMAT"),  # `None` (default formatter) is the default
+        "formatter": os.getenv(
+            "ATTENDEE_LOG_FORMAT"
+        ),  # `None` (default formatter) is the default
     }
 
 # The handlers every logger writes to.
@@ -289,17 +312,38 @@ LOG_HANDLER_NAMES = list(LOG_HANDLERS)
 # Use s3 by default, but if the STORAGE_PROTOCOL env var is set to "azure", use azure storage
 STORAGE_PROTOCOL = os.getenv("STORAGE_PROTOCOL", "s3")
 AWS_RECORDING_STORAGE_BUCKET_NAME = os.getenv("AWS_RECORDING_STORAGE_BUCKET_NAME")
-AZURE_RECORDING_STORAGE_CONTAINER_NAME = os.getenv("AZURE_RECORDING_STORAGE_CONTAINER_NAME")
+AZURE_RECORDING_STORAGE_CONTAINER_NAME = os.getenv(
+    "AZURE_RECORDING_STORAGE_CONTAINER_NAME"
+)
 
 # Audio chunk storage settings
-USE_REMOTE_STORAGE_FOR_AUDIO_CHUNKS = os.getenv("USE_REMOTE_STORAGE_FOR_AUDIO_CHUNKS", "false") == "true"
-FALLBACK_TO_DB_STORAGE_FOR_AUDIO_CHUNKS_IF_REMOTE_STORAGE_FAILS = os.getenv("FALLBACK_TO_DB_STORAGE_FOR_AUDIO_CHUNKS_IF_REMOTE_STORAGE_FAILS", "false") == "true"
-AWS_AUDIO_CHUNK_STORAGE_BUCKET_NAME = os.getenv("AWS_AUDIO_CHUNK_STORAGE_BUCKET_NAME") or AWS_RECORDING_STORAGE_BUCKET_NAME
-AZURE_AUDIO_CHUNK_STORAGE_CONTAINER_NAME = os.getenv("AZURE_AUDIO_CHUNK_STORAGE_CONTAINER_NAME") or AZURE_RECORDING_STORAGE_CONTAINER_NAME
+USE_REMOTE_STORAGE_FOR_AUDIO_CHUNKS = (
+    os.getenv("USE_REMOTE_STORAGE_FOR_AUDIO_CHUNKS", "false") == "true"
+)
+FALLBACK_TO_DB_STORAGE_FOR_AUDIO_CHUNKS_IF_REMOTE_STORAGE_FAILS = (
+    os.getenv(
+        "FALLBACK_TO_DB_STORAGE_FOR_AUDIO_CHUNKS_IF_REMOTE_STORAGE_FAILS", "false"
+    )
+    == "true"
+)
+AWS_AUDIO_CHUNK_STORAGE_BUCKET_NAME = (
+    os.getenv("AWS_AUDIO_CHUNK_STORAGE_BUCKET_NAME")
+    or AWS_RECORDING_STORAGE_BUCKET_NAME
+)
+AZURE_AUDIO_CHUNK_STORAGE_CONTAINER_NAME = (
+    os.getenv("AZURE_AUDIO_CHUNK_STORAGE_CONTAINER_NAME")
+    or AZURE_RECORDING_STORAGE_CONTAINER_NAME
+)
 
 # Bot debug screenshot storage settings
-AWS_BOT_DEBUG_SCREENSHOT_STORAGE_BUCKET_NAME = os.getenv("AWS_BOT_DEBUG_SCREENSHOT_STORAGE_BUCKET_NAME") or AWS_RECORDING_STORAGE_BUCKET_NAME
-AZURE_BOT_DEBUG_SCREENSHOT_STORAGE_CONTAINER_NAME = os.getenv("AZURE_BOT_DEBUG_SCREENSHOT_STORAGE_CONTAINER_NAME") or AZURE_RECORDING_STORAGE_CONTAINER_NAME
+AWS_BOT_DEBUG_SCREENSHOT_STORAGE_BUCKET_NAME = (
+    os.getenv("AWS_BOT_DEBUG_SCREENSHOT_STORAGE_BUCKET_NAME")
+    or AWS_RECORDING_STORAGE_BUCKET_NAME
+)
+AZURE_BOT_DEBUG_SCREENSHOT_STORAGE_CONTAINER_NAME = (
+    os.getenv("AZURE_BOT_DEBUG_SCREENSHOT_STORAGE_CONTAINER_NAME")
+    or AZURE_RECORDING_STORAGE_CONTAINER_NAME
+)
 
 if STORAGE_PROTOCOL == "azure":
     DEFAULT_STORAGE_BACKEND = {
@@ -308,17 +352,27 @@ if STORAGE_PROTOCOL == "azure":
             "connection_string": os.getenv("AZURE_CONNECTION_STRING"),
             "account_key": os.getenv("AZURE_ACCOUNT_KEY"),
             "account_name": os.getenv("AZURE_ACCOUNT_NAME"),
-            "expiration_secs": None if os.getenv("AZURE_STORAGE_USE_PERMANENT_LINKS", "false") == "true" else int(os.getenv("AZURE_STORAGE_LINK_EXPIRATION_SECONDS", 1800)),
+            "expiration_secs": (
+                None
+                if os.getenv("AZURE_STORAGE_USE_PERMANENT_LINKS", "false") == "true"
+                else int(os.getenv("AZURE_STORAGE_LINK_EXPIRATION_SECONDS", 1800))
+            ),
         },
     }
     RECORDING_STORAGE_BACKEND = copy.deepcopy(DEFAULT_STORAGE_BACKEND)
-    RECORDING_STORAGE_BACKEND["OPTIONS"]["azure_container"] = AZURE_RECORDING_STORAGE_CONTAINER_NAME
+    RECORDING_STORAGE_BACKEND["OPTIONS"][
+        "azure_container"
+    ] = AZURE_RECORDING_STORAGE_CONTAINER_NAME
 
     AUDIO_CHUNK_STORAGE_BACKEND = copy.deepcopy(DEFAULT_STORAGE_BACKEND)
-    AUDIO_CHUNK_STORAGE_BACKEND["OPTIONS"]["azure_container"] = AZURE_AUDIO_CHUNK_STORAGE_CONTAINER_NAME
+    AUDIO_CHUNK_STORAGE_BACKEND["OPTIONS"][
+        "azure_container"
+    ] = AZURE_AUDIO_CHUNK_STORAGE_CONTAINER_NAME
 
     BOT_DEBUG_SCREENSHOT_STORAGE_BACKEND = copy.deepcopy(DEFAULT_STORAGE_BACKEND)
-    BOT_DEBUG_SCREENSHOT_STORAGE_BACKEND["OPTIONS"]["azure_container"] = AZURE_BOT_DEBUG_SCREENSHOT_STORAGE_CONTAINER_NAME
+    BOT_DEBUG_SCREENSHOT_STORAGE_BACKEND["OPTIONS"][
+        "azure_container"
+    ] = AZURE_BOT_DEBUG_SCREENSHOT_STORAGE_CONTAINER_NAME
 else:
     DEFAULT_STORAGE_BACKEND = {
         "BACKEND": "storages.backends.s3.S3Storage",
@@ -330,17 +384,23 @@ else:
     }
     # Deep copy the DEFAULT_STORAGE_BACKEND
     RECORDING_STORAGE_BACKEND = copy.deepcopy(DEFAULT_STORAGE_BACKEND)
-    RECORDING_STORAGE_BACKEND["OPTIONS"]["bucket_name"] = AWS_RECORDING_STORAGE_BUCKET_NAME
+    RECORDING_STORAGE_BACKEND["OPTIONS"][
+        "bucket_name"
+    ] = AWS_RECORDING_STORAGE_BUCKET_NAME
     # Recording URLs are signed and expire after 30 minutes. With permanent links they are plain URLs that never expire,
     # which only work if the recording files are publicly readable, e.g. through a bucket policy.
     if os.getenv("AWS_RECORDING_STORAGE_USE_PERMANENT_LINKS", "false") == "true":
         RECORDING_STORAGE_BACKEND["OPTIONS"]["querystring_auth"] = False
 
     AUDIO_CHUNK_STORAGE_BACKEND = copy.deepcopy(DEFAULT_STORAGE_BACKEND)
-    AUDIO_CHUNK_STORAGE_BACKEND["OPTIONS"]["bucket_name"] = AWS_AUDIO_CHUNK_STORAGE_BUCKET_NAME
+    AUDIO_CHUNK_STORAGE_BACKEND["OPTIONS"][
+        "bucket_name"
+    ] = AWS_AUDIO_CHUNK_STORAGE_BUCKET_NAME
 
     BOT_DEBUG_SCREENSHOT_STORAGE_BACKEND = copy.deepcopy(DEFAULT_STORAGE_BACKEND)
-    BOT_DEBUG_SCREENSHOT_STORAGE_BACKEND["OPTIONS"]["bucket_name"] = AWS_BOT_DEBUG_SCREENSHOT_STORAGE_BUCKET_NAME
+    BOT_DEBUG_SCREENSHOT_STORAGE_BACKEND["OPTIONS"][
+        "bucket_name"
+    ] = AWS_BOT_DEBUG_SCREENSHOT_STORAGE_BUCKET_NAME
 
 
 STORAGES = {
@@ -362,47 +422,86 @@ CHARGE_CREDITS_FOR_BOTS = os.getenv("CHARGE_CREDITS_FOR_BOTS", "false") == "true
 # Previously a prejoin leave or meeting end caused the bot to finish in the ended state
 # which was misleading because that implies the bot did something useful.
 # This flag is temporary, in the future we will remove this flag and always map prejoin leave or meeting end to the fatal error state.
-PREJOIN_LEAVE_OR_MEETING_END_IS_FATAL_ERROR = os.getenv("PREJOIN_LEAVE_OR_MEETING_END_IS_FATAL_ERROR", "false") == "true"
+PREJOIN_LEAVE_OR_MEETING_END_IS_FATAL_ERROR = (
+    os.getenv("PREJOIN_LEAVE_OR_MEETING_END_IS_FATAL_ERROR", "false") == "true"
+)
 
 # We previously did not report the BOT_PUT_IN_WAITING_ROOM event for web bots.
 # This flag is temporary, in the future we will remove this flag and always report the BOT_PUT_IN_WAITING_ROOM event for web bots.
-ENABLE_WAITING_ROOM_STATE_FOR_WEB_BOTS = os.getenv("ENABLE_WAITING_ROOM_STATE_FOR_WEB_BOTS", "false") == "true"
+ENABLE_WAITING_ROOM_STATE_FOR_WEB_BOTS = (
+    os.getenv("ENABLE_WAITING_ROOM_STATE_FOR_WEB_BOTS", "false") == "true"
+)
 
 # Web bots bind their websocket server to a fixed port per platform and try the next 10 ports if it is taken.
 # When enabled, the OS picks a free port instead, so any number of bots can share a network namespace.
-ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS = os.getenv("ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS", "false") == "true"
+ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS = (
+    os.getenv("ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS", "false") == "true"
+)
 
 BOT_POD_NAMESPACE = os.getenv("BOT_POD_NAMESPACE", "attendee")
-WEBPAGE_STREAMER_POD_NAMESPACE = os.getenv("WEBPAGE_STREAMER_POD_NAMESPACE", "attendee-webpage-streamer")
+WEBPAGE_STREAMER_POD_NAMESPACE = os.getenv(
+    "WEBPAGE_STREAMER_POD_NAMESPACE", "attendee-webpage-streamer"
+)
 REQUIRE_HTTPS_WEBHOOKS = os.getenv("REQUIRE_HTTPS_WEBHOOKS", "true") == "true"
-REQUIRE_PUBLIC_WEBHOOK_URLS = os.getenv("REQUIRE_PUBLIC_WEBHOOK_URLS", "false") == "true"
-SHOW_CATEGORY_SELECTOR_IN_USAGE_DASHBOARD = os.getenv("SHOW_CATEGORY_SELECTOR_IN_USAGE_DASHBOARD", "false") == "true"
-REQUIRE_STRING_VALUES_IN_METADATA = os.getenv("REQUIRE_STRING_VALUES_IN_METADATA", "true") == "true"
+REQUIRE_PUBLIC_WEBHOOK_URLS = (
+    os.getenv("REQUIRE_PUBLIC_WEBHOOK_URLS", "false") == "true"
+)
+SHOW_CATEGORY_SELECTOR_IN_USAGE_DASHBOARD = (
+    os.getenv("SHOW_CATEGORY_SELECTOR_IN_USAGE_DASHBOARD", "false") == "true"
+)
+REQUIRE_STRING_VALUES_IN_METADATA = (
+    os.getenv("REQUIRE_STRING_VALUES_IN_METADATA", "true") == "true"
+)
 MAX_METADATA_LENGTH = int(os.getenv("MAX_METADATA_LENGTH", 1000))
 SITE_DOMAIN = os.getenv("SITE_DOMAIN", "app.attendee.dev")
 INTERNAL_SITE_DOMAIN = os.getenv("INTERNAL_SITE_DOMAIN")
-USE_OKTA_LOGIN_FOR_SIGNED_IN_GOOGLE_MEET_BOTS = os.getenv("USE_OKTA_LOGIN_FOR_SIGNED_IN_GOOGLE_MEET_BOTS", "false") == "true"
+USE_OKTA_LOGIN_FOR_SIGNED_IN_GOOGLE_MEET_BOTS = (
+    os.getenv("USE_OKTA_LOGIN_FOR_SIGNED_IN_GOOGLE_MEET_BOTS", "false") == "true"
+)
 OKTA_BOT_LOGIN_DOMAIN = os.getenv("OKTA_BOT_LOGIN_DOMAIN")
 MASK_TRANSCRIPT_IN_LOGS = os.getenv("MASK_TRANSCRIPT_IN_LOGS", "false") == "true"
-ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME = os.getenv("ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME", "false") == "true"
-MONITOR_DOMAIN_ALLOWLIST_IN_CHROME = ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME or (os.getenv("MONITOR_DOMAIN_ALLOWLIST_IN_CHROME", "false") == "true")
-LOAD_NAVIGATION_CONFIG_REMOTELY = os.getenv("LOAD_NAVIGATION_CONFIG_REMOTELY", "false") == "true"
-CUSTOM_BOT_POD_SPEC_TYPES = os.getenv("CUSTOM_BOT_POD_SPEC_TYPES", "").split(",") if os.getenv("CUSTOM_BOT_POD_SPEC_TYPES") else []
-GLOBAL_WEBHOOK_DELIVERIES_PER_SECOND_RATE_LIMIT = int(os.getenv("GLOBAL_WEBHOOK_DELIVERIES_PER_SECOND_RATE_LIMIT")) if os.getenv("GLOBAL_WEBHOOK_DELIVERIES_PER_SECOND_RATE_LIMIT") else None
+ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME = (
+    os.getenv("ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME", "false") == "true"
+)
+MONITOR_DOMAIN_ALLOWLIST_IN_CHROME = ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME or (
+    os.getenv("MONITOR_DOMAIN_ALLOWLIST_IN_CHROME", "false") == "true"
+)
+LOAD_NAVIGATION_CONFIG_REMOTELY = (
+    os.getenv("LOAD_NAVIGATION_CONFIG_REMOTELY", "false") == "true"
+)
+CUSTOM_BOT_POD_SPEC_TYPES = (
+    os.getenv("CUSTOM_BOT_POD_SPEC_TYPES", "").split(",")
+    if os.getenv("CUSTOM_BOT_POD_SPEC_TYPES")
+    else []
+)
+GLOBAL_WEBHOOK_DELIVERIES_PER_SECOND_RATE_LIMIT = (
+    int(os.getenv("GLOBAL_WEBHOOK_DELIVERIES_PER_SECOND_RATE_LIMIT"))
+    if os.getenv("GLOBAL_WEBHOOK_DELIVERIES_PER_SECOND_RATE_LIMIT")
+    else None
+)
 LOG_BOT_STATE_CHANGES = os.getenv("LOG_BOT_STATE_CHANGES", "false") == "true"
 LAUNCH_ADHOC_BOTS_ASYNC = os.getenv("LAUNCH_ADHOC_BOTS_ASYNC", "false") == "true"
-SHOW_TEAMS_BOT_IDENTIFICATION_CREDENTIALS = os.getenv("SHOW_TEAMS_BOT_IDENTIFICATION_CREDENTIALS", "false") == "true"
+SHOW_TEAMS_BOT_IDENTIFICATION_CREDENTIALS = (
+    os.getenv("SHOW_TEAMS_BOT_IDENTIFICATION_CREDENTIALS", "false") == "true"
+)
 GOOGLE_MEET_MOCAP_SPEED_FACTOR = float(os.getenv("GOOGLE_MEET_MOCAP_SPEED_FACTOR", 1.0))
 
-STORE_INFRASTRUCTURE_INFORMATION_IN_BOT_EVENT_METADATA = os.getenv("STORE_INFRASTRUCTURE_INFORMATION_IN_BOT_EVENT_METADATA", "true") == "true"
+STORE_INFRASTRUCTURE_INFORMATION_IN_BOT_EVENT_METADATA = (
+    os.getenv("STORE_INFRASTRUCTURE_INFORMATION_IN_BOT_EVENT_METADATA", "true")
+    == "true"
+)
 
 CONCURRENT_BOTS_LIMIT = int(os.getenv("CONCURRENT_BOTS_LIMIT", 2500))
 
 # The scheduler launches a scheduled bot once the current time is within this window around its join_at.
 # BEFORE: how early the bot is launched, to give it time to spin up before join_at.
 # AFTER: how late a missed bot can still be launched.
-SCHEDULED_BOT_LAUNCH_WINDOW_BEFORE_JOIN_AT_SECONDS = int(os.getenv("SCHEDULED_BOT_LAUNCH_WINDOW_BEFORE_JOIN_AT_SECONDS", 300))
-SCHEDULED_BOT_LAUNCH_WINDOW_AFTER_JOIN_AT_SECONDS = int(os.getenv("SCHEDULED_BOT_LAUNCH_WINDOW_AFTER_JOIN_AT_SECONDS", 300))
+SCHEDULED_BOT_LAUNCH_WINDOW_BEFORE_JOIN_AT_SECONDS = int(
+    os.getenv("SCHEDULED_BOT_LAUNCH_WINDOW_BEFORE_JOIN_AT_SECONDS", 300)
+)
+SCHEDULED_BOT_LAUNCH_WINDOW_AFTER_JOIN_AT_SECONDS = int(
+    os.getenv("SCHEDULED_BOT_LAUNCH_WINDOW_AFTER_JOIN_AT_SECONDS", 300)
+)
 
 CLEANTALK_API_KEY = os.getenv("CLEANTALK_API_KEY")
 USERCHECK_API_KEY = os.getenv("USERCHECK_API_KEY")
@@ -410,13 +509,25 @@ MAILGUN_VALIDATION_API_KEY = os.getenv("MAILGUN_VALIDATION_API_KEY")
 BYPASS_MAILGUN_VALIDATION_SUBSTRING = os.getenv("BYPASS_MAILGUN_VALIDATION_SUBSTRING")
 
 # After the bots recording exceeds this size, we will degrade the video recording to black to conserve storage space.
-BOT_RECORDING_VIDEO_DEGRADE_THRESHOLD_BYTES = int(os.getenv("BOT_RECORDING_VIDEO_DEGRADE_THRESHOLD_BYTES")) if os.getenv("BOT_RECORDING_VIDEO_DEGRADE_THRESHOLD_BYTES") else None
+BOT_RECORDING_VIDEO_DEGRADE_THRESHOLD_BYTES = (
+    int(os.getenv("BOT_RECORDING_VIDEO_DEGRADE_THRESHOLD_BYTES"))
+    if os.getenv("BOT_RECORDING_VIDEO_DEGRADE_THRESHOLD_BYTES")
+    else None
+)
 
-SAVE_INSTANCE_HEALTH_SNAPSHOTS = os.getenv("SAVE_INSTANCE_HEALTH_SNAPSHOTS", "false") == "true"
-INSTANCE_HEALTH_ONLY_VIEWABLE_BY_SUPERUSERS = os.getenv("INSTANCE_HEALTH_ONLY_VIEWABLE_BY_SUPERUSERS", "false") == "true"
+SAVE_INSTANCE_HEALTH_SNAPSHOTS = (
+    os.getenv("SAVE_INSTANCE_HEALTH_SNAPSHOTS", "false") == "true"
+)
+INSTANCE_HEALTH_ONLY_VIEWABLE_BY_SUPERUSERS = (
+    os.getenv("INSTANCE_HEALTH_ONLY_VIEWABLE_BY_SUPERUSERS", "false") == "true"
+)
 
-SAVE_BOT_RESOURCE_SNAPSHOTS = str(os.getenv("SAVE_BOT_RESOURCE_SNAPSHOTS", "false")).lower() == "true"
-BOT_RESOURCE_USAGE_ONLY_VIEWABLE_BY_SUPERUSERS = os.getenv("BOT_RESOURCE_USAGE_ONLY_VIEWABLE_BY_SUPERUSERS", "false") == "true"
+SAVE_BOT_RESOURCE_SNAPSHOTS = (
+    str(os.getenv("SAVE_BOT_RESOURCE_SNAPSHOTS", "false")).lower() == "true"
+)
+BOT_RESOURCE_USAGE_ONLY_VIEWABLE_BY_SUPERUSERS = (
+    os.getenv("BOT_RESOURCE_USAGE_ONLY_VIEWABLE_BY_SUPERUSERS", "false") == "true"
+)
 
 # Content Security Policy
 if os.getenv("ENABLE_CSP", "false") == "true":
@@ -424,7 +535,12 @@ if os.getenv("ENABLE_CSP", "false") == "true":
     CONTENT_SECURITY_POLICY = {
         "DIRECTIVES": {
             "default-src": ["'self'"],
-            "script-src": ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net"],
+            "script-src": [
+                "'self'",
+                "'unsafe-inline'",
+                "https://unpkg.com",
+                "https://cdn.jsdelivr.net",
+            ],
             "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
             "font-src": ["'self'", "https://cdn.jsdelivr.net"],
             "img-src": ["'self'", "data:"] + _csp_media_src,

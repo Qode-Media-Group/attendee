@@ -1504,8 +1504,8 @@ class CreateCheckoutSessionView(LoginRequiredMixin, ProjectUrlContextMixin, View
                     "price_data": {
                         "currency": "usd",
                         "product_data": {
-                            "name": f"{credit_amount} Attendee Credits",
-                            "description": f"Purchase {credit_amount} Attendee credits for your account",
+                            "name": f"{credit_amount} {settings.APP_NAME} Credits",
+                            "description": f"Purchase {credit_amount} {settings.APP_NAME} credits for your account",
                         },
                         "unit_amount": unit_amount,
                     },

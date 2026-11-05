@@ -217,6 +217,10 @@ class StandardAccountAdapter(DefaultAccountAdapter):
 
         return super().send_mail(template_prefix, email, context)
 
+    def render_mail(self, template_prefix, email, context, headers=None):
+        # allauth renders the subject without a request, so context processors don't reach it.
+        return super().render_mail(template_prefix, email, {**context, "APP_NAME": settings.APP_NAME}, headers=headers)
+
 
 class NoNewUsersAccountAdapter(StandardAccountAdapter):
     def is_open_for_signup(self, request):

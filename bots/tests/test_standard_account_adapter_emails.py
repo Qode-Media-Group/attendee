@@ -5,7 +5,8 @@ from unittest.mock import patch
 from allauth.account.adapter import DefaultAccountAdapter
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.template.loader import render_to_string
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from accounts.adapters import StandardAccountAdapter
 from accounts.models import Organization
@@ -251,3 +252,26 @@ class StandardAccountAdapterRenderedEmailTests(TestCase):
             "localhost:8000",
             rendered_email,
         )
+
+
+@override_settings(APP_NAME="Acme Bots")
+class AppNameTests(SimpleTestCase):
+    @patch.object(DefaultAccountAdapter, "format_email_subject", side_effect=lambda subject: subject)
+    def test_invitation_email_uses_app_name(self, _mock_format_email_subject):
+        user_model = get_user_model()
+        user = user_model(email="invited@example.com", invited_by=user_model(email="inviter@example.com"))
+
+        message = StandardAccountAdapter().render_mail(
+            "account/email/email_confirmation",
+            "invited@example.com",
+            {"user": user, "activate_url": "https://example.com/confirm/"},
+        )
+
+        self.assertIn("on Acme Bots", message.subject)
+        self.assertIn("join them on Acme Bots", message.body)
+
+    def test_templates_use_app_name(self):
+        request = RequestFactory().get("/")
+
+        self.assertIn("<title>Acme Bots</title>", render_to_string("base.html", request=request))
+        self.assertIn("Acme Bots", render_to_string("partials/_app_logo.html", request=request))
