@@ -23,6 +23,8 @@ x-attendee-environment: &attendee-environment
 
 x-attendee-service: &attendee-service
   build: ./
+  # Built here, not in a registry, so compose should never try to pull it
+  pull_policy: never
   image: &attendee-image attendee-attendee-worker-local:latest
   volumes:
     - .:/attendee
