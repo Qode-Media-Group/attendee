@@ -54,7 +54,7 @@ services:
     <<: *attendee-service
     command: "celery -A attendee worker -c 2 -l INFO"
 
-  # Starts each bot in its own container (attendee-bot-<id>), which is removed when the bot
+  # Starts each bot in its own container (bot-<id>-<object_id>), which is removed when the bot
   # ends, so a crashed or stuck bot can't leave Chrome running. Bot containers copy this
   # service's environment and use host networking, where service names don't resolve.
   attendee-bot-launcher-local:

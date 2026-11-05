@@ -1,5 +1,5 @@
 # Production stack for one x86 server, using an external Postgres and Redis and an nginx in front.
-# Clone the repo to /opt/attendee and run docker compose from there. Has the same services as
+# Clone the repo and run docker compose from its root folder. Has the same services as
 # dev.docker-compose.yaml. Settings for this stack live here. Secrets and settings for this server
 # live in .env, see .env.prod.example.
 
@@ -41,7 +41,7 @@ services:
     <<: *attendee-service
     command: "celery -A attendee worker -c 2 -l INFO"
 
-  # Starts each bot in its own container (attendee-bot-<id>), which is removed when the bot
+  # Starts each bot in its own container (bot-<id>-<object_id>), which is removed when the bot
   # ends, so a crashed or stuck bot can't leave Chrome running. Bot containers copy this
   # service's environment and use host networking, so POSTGRES_HOST and REDIS_URL must be
   # reachable from the host.
@@ -53,7 +53,7 @@ services:
       ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS: "true"
       BOT_CONTAINER_IMAGE: *attendee-image
       # This folder on the host, mounted into each bot container
-      BOT_HOST_CODE_PATH: /opt/attendee
+      BOT_HOST_CODE_PATH: ${PWD}
       BOT_MEMORY_LIMIT: 2g
       # 100000 is one core
       BOT_CPU_QUOTA: 100000
