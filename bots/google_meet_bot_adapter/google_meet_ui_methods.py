@@ -582,6 +582,18 @@ class GoogleMeetUIMethods:
                         e,
                     )
 
+            # Meet re-renders the toolbar right after the bot is admitted, so look for the button again
+            except StaleElementReferenceException as e:
+                logger.info("Captions button went stale, looking for it again")
+                last_check_was_stale = attempt_to_look_for_captions_button_index == num_attempts_to_look_for_captions_button - 1
+                if last_check_was_stale:
+                    logger.warning("Could not find captions button. It kept going stale. Raising UiCouldNotLocateElementException")
+                    raise UiCouldNotLocateElementException(
+                        "Could not find captions button. It kept going stale.",
+                        "click_captions_button",
+                        e,
+                    )
+
             except Exception as e:
                 logger.warning(f"Could not find captions button. Unknown error {e} of type {type(e)}. Raising UiCouldNotLocateElementException")
                 raise UiCouldNotLocateElementException(
