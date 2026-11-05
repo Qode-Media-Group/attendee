@@ -1,143 +1,115 @@
+# Development stack. Has the same services as prod.docker-compose.yaml, with these differences:
+# the code reloads, recordings and emails stay in ./local_storage, and Postgres and Redis run on
+# this machine. Settings for this stack live here. Secrets and personal settings live in .env,
+# which the app reads itself, see .env.example.
+
+x-attendee-environment: &attendee-environment
+  DJANGO_SETTINGS_MODULE: attendee.settings.development
+  LAUNCH_BOT_METHOD: docker-compose-multi-host
+  ENABLE_CHROME_SANDBOX: "false"
+  # Postgres and Redis run outside this stack. By default the services reach them on this machine
+  # through host.docker.internal; set POSTGRES_HOST and REDIS_URL in .env to use other servers.
+  POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+  REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379/5}
+  # Recordings, audio chunks and debug screenshots go to the storage service below. s3.localhost
+  # resolves to that container inside the network and to 127.0.0.1 in the browser, so presigned
+  # recording URLs work from both.
+  AWS_ENDPOINT_URL: http://s3.localhost:19000
+  AWS_RECORDING_STORAGE_BUCKET_NAME: attendee-local
+  AWS_ACCESS_KEY_ID: &storage-access-key attendee-local
+  AWS_SECRET_ACCESS_KEY: &storage-secret-key attendee-local-secret
+  AWS_DEFAULT_REGION: us-east-1
+  EMAIL_FILE_PATH: /attendee/local_storage/emails
+
+x-attendee-service: &attendee-service
+  build: ./
+  image: &attendee-image attendee-attendee-worker-local:latest
+  volumes:
+    - .:/attendee
+  networks:
+    - attendee_network
+  environment: *attendee-environment
+  depends_on:
+    storage:
+      condition: service_healthy
+  logging: &attendee-logging
+    driver: json-file
+    options:
+      max-size: 50m
+      max-file: "5"
+
+# For services that start or remove bot containers. The image runs as "app"; the Docker socket
+# is only open to the root group.
+x-docker-access: &docker-access
+  volumes:
+    - .:/attendee
+    - /var/run/docker.sock:/var/run/docker.sock
+  group_add:
+    - "0"
+
 services:
   attendee-worker-local:
-    build: ./
-    volumes:
-     - .:/attendee
-    networks:
-      - attendee_network
-    environment:
-      - POSTGRES_HOST=postgres
-      - REDIS_URL=redis://redis:6379/5
-      - DJANGO_SETTINGS_MODULE=attendee.settings.development
-      - ENABLE_CHROME_SANDBOX=false
-      - LAUNCH_BOT_METHOD=docker-compose-multi-host
-    command: "celery -A attendee worker -l INFO"
+    <<: *attendee-service
+    command: "celery -A attendee worker -c 2 -l INFO"
 
   # Starts each bot in its own container (attendee-bot-<id>), which is removed when the bot
   # ends, so a crashed or stuck bot can't leave Chrome running. Bot containers copy this
-  # service's environment and use host networking, where service names don't resolve, so
-  # postgres and redis are given by their fixed addresses on attendee_network (below).
+  # service's environment and use host networking, where service names don't resolve.
   attendee-bot-launcher-local:
-    image: attendee-attendee-worker-local:latest
-    depends_on:
-      - attendee-worker-local
-    volumes:
-     - .:/attendee
-     - /var/run/docker.sock:/var/run/docker.sock
-    # The image runs as "app"; the Docker socket is only open to the root group
-    group_add:
-      - "0"
-    networks:
-      - attendee_network
+    <<: [*docker-access, *attendee-service]
     environment:
-      - POSTGRES_HOST=172.18.0.200
-      - REDIS_URL=redis://172.18.0.201:6379/5
-      - DJANGO_SETTINGS_MODULE=attendee.settings.development
-      - ENABLE_CHROME_SANDBOX=false
-      - LAUNCH_BOT_METHOD=docker-compose-multi-host
+      <<: *attendee-environment
       # Bots share the host network, so each one picks a free websocket port
-      - ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS=true
-      - BOT_CONTAINER_IMAGE=attendee-attendee-worker-local:latest
+      ENABLE_BOT_WEBSOCKET_PORT_SELECTION_BY_OS: "true"
+      BOT_CONTAINER_IMAGE: *attendee-image
       # This folder on the host, mounted into each bot container (run docker compose from here)
-      - BOT_HOST_CODE_PATH=${PWD}
-      - BOT_MEMORY_LIMIT=2g
+      BOT_HOST_CODE_PATH: ${PWD}
+      BOT_MEMORY_LIMIT: 2g
       # The image is linux/amd64, so on Apple Silicon Chrome runs emulated and needs more than 1 CPU
-      - BOT_CPU_QUOTA=400000
-      - BOT_MAX_SIMULTANEOUS_BOTS=2
-    command: "celery -A attendee worker -Q bot_launcher_vm -l INFO"
+      BOT_CPU_QUOTA: 400000
+      BOT_MAX_SIMULTANEOUS_BOTS: 2
+    # 1 keeps launches from slipping past BOT_MAX_SIMULTANEOUS_BOTS
+    command: "celery -A attendee worker -Q bot_launcher_vm -c 2 -l INFO"
+    entrypoint: []
+
+  # Ends bots that stopped sending heartbeats or never launched, and removes their containers
+  attendee-bot-cleanup-local:
+    <<: [*docker-access, *attendee-service]
+    command: sh -c "while true; do python manage.py clean_up_bots_with_heartbeat_timeout_or_that_never_launched; sleep 300; done"
     entrypoint: []
 
   attendee-scheduler-local:
-    build: ./
-    volumes:
-     - .:/attendee
-    networks:
-      - attendee_network
-    environment:
-      - POSTGRES_HOST=postgres
-      - REDIS_URL=redis://redis:6379/5
-      - DJANGO_SETTINGS_MODULE=attendee.settings.development
-      - LAUNCH_BOT_METHOD=docker-compose-multi-host
+    <<: *attendee-service
     command: "python manage.py run_scheduler"
     entrypoint: []
 
   attendee-app-local:
-    build: ./
-    volumes:
-     - .:/attendee
-    networks:
-      - attendee_network
+    <<: *attendee-service
     ports:
-      - "8007:8000"
-    environment:
-      - POSTGRES_HOST=postgres
-      - REDIS_URL=redis://redis:6379/5
-      - DJANGO_SETTINGS_MODULE=attendee.settings.development
-      - LAUNCH_BOT_METHOD=docker-compose-multi-host
-    command: python manage.py runserver 0.0.0.0:8000
+      - "127.0.0.1:8007:8000"
+    command: "python manage.py runserver 0.0.0.0:8000"
     entrypoint: []
 
   attendee-webpage-streamer-local:
-    build: ./
-    volumes:
-     - .:/attendee
-    networks:
-      - attendee_network
+    <<: *attendee-service
     ports:
-      - "8001:8000"
-    environment:
-      - DJANGO_SETTINGS_MODULE=attendee.settings.development
-      - ENABLE_CHROME_SANDBOX=true
+      - "127.0.0.1:8001:8000"
     command: "python bots/webpage_streamer/run_webpage_streamer.py"
     security_opt:
       - seccomp=./bots/web_bot_adapter/chrome_seccomp.json
     profiles:
       - webpage-streamer
 
-
-  postgres:
-    image: postgres:15.3-alpine
-    environment:
-      POSTGRES_DB: attendee_development
-      POSTGRES_USER: attendee_development_user
-      POSTGRES_PASSWORD: attendee_development_user
-      PGDATA: /data/postgres
-    volumes:
-       - postgres:/data/postgres
-    networks:
-      attendee_network:
-        # Fixed, so bot containers (host networking) can reach it; see attendee-bot-launcher-local
-        ipv4_address: 172.18.0.200
-    restart: unless-stopped
-
-
-  redis:
-    image: redis:7-alpine
-    networks:
-      attendee_network:
-        # Fixed, so bot containers (host networking) can reach it; see attendee-bot-launcher-local
-        ipv4_address: 172.18.0.201
-    restart: unless-stopped
-    volumes:
-      - redis:/data/redis
-
-  # Optional S3-compatible storage that keeps recordings, audio chunks and debug screenshots
-  # in ./local_storage/s3 instead of AWS. Enable it by setting these in .env:
-  #   COMPOSE_PROFILES=local-storage
-  #   AWS_ENDPOINT_URL=http://s3.localhost:19000
-  # s3.localhost resolves to this container inside the network and to 127.0.0.1 in the browser,
-  # so presigned recording URLs work from both.
+  # S3-compatible storage that keeps recordings, audio chunks and debug screenshots in
+  # ./local_storage/s3 instead of AWS
   storage:
     image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - mkdir -p /srv/data/$$AWS_RECORDING_STORAGE_BUCKET_NAME /srv/meta && exec versitygw --port :19000 --health /health --quiet posix --sidecar /srv/meta /srv/data
-    env_file:
-      - path: .env
-        required: false
+      - mkdir -p /srv/data/attendee-local /srv/meta && exec versitygw --port :19000 --health /health --quiet posix --sidecar /srv/meta /srv/data
     environment:
-      ROOT_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:-}
-      ROOT_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ROOT_ACCESS_KEY: *storage-access-key
+      ROOT_SECRET_KEY: *storage-secret-key
     ports:
       - "127.0.0.1:19000:19000"
     volumes:
@@ -147,21 +119,13 @@ services:
       attendee_network:
         aliases:
           - s3.localhost
+    logging: *attendee-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:19000/health || exit 1"]
       interval: 5s
       retries: 20
     restart: unless-stopped
-    profiles:
-      - local-storage
 
 networks:
   attendee_network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.18.0.0/16
-
-volumes:
-  postgres:
-  redis:

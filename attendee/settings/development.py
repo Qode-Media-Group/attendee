@@ -18,9 +18,9 @@ if os.getenv("EMAIL_FILE_PATH"):
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "attendee_development",
-        "USER": "attendee_development_user",
-        "PASSWORD": "attendee_development_user",
+        "NAME": os.getenv("POSTGRES_DB", "attendee_development"),
+        "USER": os.getenv("POSTGRES_USER", "attendee_development_user"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "attendee_development_user"),
         "HOST": os.getenv("POSTGRES_HOST", "localhost"),
         "PORT": "5432",
     }

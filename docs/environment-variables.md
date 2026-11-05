@@ -89,14 +89,7 @@ This document lists all supported environment variables for the Attendee applica
 
 ### Local Development Storage
 
-`dev.docker-compose.yaml` includes an optional S3-compatible server (versitygw) that stores recordings, audio chunks and debug screenshots in `./local_storage/s3` instead of AWS. To use it, set these in `.env` along with the AWS variables above:
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `COMPOSE_PROFILES` | `local-storage` | Starts the `storage` service with the other development services. |
-| `AWS_ENDPOINT_URL` | `http://s3.localhost:19000` | Points uploads at the local server. `s3.localhost` resolves to the server inside Docker and to `127.0.0.1` in the browser, so recording download links work from both. |
-| `AWS_RECORDING_STORAGE_BUCKET_NAME` | Any name, e.g. `attendee-local` | The bucket is created as a folder under `./local_storage/s3`. |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Any random values | Used as the local server's credentials. |
+`dev.docker-compose.yaml` runs an S3-compatible server (versitygw) that stores recordings, audio chunks and debug screenshots in `./local_storage/s3` instead of AWS. The compose file sets `AWS_ENDPOINT_URL`, `AWS_RECORDING_STORAGE_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_DEFAULT_REGION` for it, so they don't belong in `.env`. `s3.localhost` resolves to the server inside Docker and to `127.0.0.1` in the browser, so recording download links work from both.
 
 ---
 
@@ -105,7 +98,7 @@ This document lists all supported environment variables for the Attendee applica
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `DISABLE_EMAIL` | Boolean | `false` | Disable email sending. Set to `true` to use console backend for development. |
-| `EMAIL_FILE_PATH` | String | (None) | Development settings only. Writes outgoing emails (such as signup confirmations) as files in this directory instead of printing them to the console, e.g. `/attendee/local_storage/emails`. |
+| `EMAIL_FILE_PATH` | String | (None) | Development settings only. Writes outgoing emails (such as signup confirmations) as files in this directory instead of printing them to the console. `dev.docker-compose.yaml` sets it to `/attendee/local_storage/emails`. |
 | `EMAIL_HOST` | String | `smtp.mailgun.org` | SMTP server hostname. |
 | `EMAIL_HOST_USER` | String | **Required** (if email enabled) | SMTP username. |
 | `EMAIL_HOST_PASSWORD` | String | **Required** (if email enabled) | SMTP password. |

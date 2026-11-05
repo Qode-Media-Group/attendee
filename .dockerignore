@@ -93,3 +93,9 @@ db.sqlite3
 core
 
 local_storage
+
+.git
+.github
+.venv
+.ruff_cache
+*.deb

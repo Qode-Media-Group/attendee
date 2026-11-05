@@ -106,16 +106,16 @@ For more details, follow [this guide](https://developers.zoom.us/docs/meeting-sd
 
 ## Running in development mode
 
+- Have PostgreSQL and Redis running on your machine, with a `attendee_development` database owned by a `attendee_development_user` login (password `attendee_development_user`). To use other servers or credentials, see [`.env.example`](.env.example).
 - Build the Docker image: `docker compose -f dev.docker-compose.yaml build` (Takes about 5 minutes)
 - Create local environment variables
   - **Linux/Mac**: `docker compose -f dev.docker-compose.yaml run --rm attendee-app-local python init_env.py > .env`
   - **Windows**: `docker compose -f dev.docker-compose.yaml run --rm attendee-app-local python init_env.py | Out-File -Encoding utf8 .env` 
-- Edit the `.env` file and enter your AWS information. [`.env.example`](.env.example) shows a complete development `.env` with local storage. To keep recordings on your machine instead of AWS, use the local storage server described in [Local Development Storage](docs/environment-variables.md#local-development-storage).
-- Optionally, add `EMAIL_FILE_PATH=/attendee/local_storage/emails` to `.env` to save emails (such as the signup confirmation link) as files instead of printing them to the server logs.
+- Recordings stay on your machine in `./local_storage/s3` and emails (such as the signup confirmation link) in `./local_storage/emails`, so the AWS values in `.env` can stay empty. See [`.env.example`](.env.example) for the other settings.
 - Start all the services: `docker compose -f dev.docker-compose.yaml up`
 - After the services have started, run migrations in a separate terminal tab: `docker compose -f dev.docker-compose.yaml exec attendee-app-local python manage.py migrate`
 - Goto localhost:8000 in your browser and create an account
-- The confirmation link will be written to the server logs in the terminal where you ran `docker compose -f dev.docker-compose.yaml up`. Should look like `http://localhost:8000/accounts/confirm-email/<key>/`.
+- The confirmation link will be in a file in `./local_storage/emails`. Should look like `http://localhost:8000/accounts/confirm-email/<key>/`.
 - Paste the link into your browser to confirm your account.
 - You should now be able to log in, input your credentials and obtain an API key. API calls should be directed to http://localhost:8000 instead of https://app.attendee.dev.
 
